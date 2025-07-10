@@ -48,3 +48,20 @@ enum srOutputs {
 };
 
 #define NUM_LASERS 8
+
+struct AudioTrack {
+    uint8_t trackNum;
+    uint16_t durationMs; // in milliseconds
+};
+
+const AudioTrack audioTracks[] = {
+    {1, 27000}, // Instructions
+    {2, 6000},  // 2 lives left
+    {3, 9000},  // 1 life left
+    {4, 8000},  // 0 lives left
+    {5, 11000}, // Mission successful
+    {6, 4000},  // Timeout 1
+    {7, 6000},  // Timeout 2
+    {8, 5000},  // Timeout 3
+    {9, 11000}  // Reset audio
+};

@@ -1,57 +1,45 @@
+#include <Arduino.h>
 #include "globals.h"
-#include "isr.h"
 #include "functions.h"
-#include "tasks.h"
-
-// --- Global variable definitions ---
-const int rfPins[4] = {23, 4, 15, 25};
-const unsigned long LONG_PRESS_MS = 800;
-QueueHandle_t rfEventQueue;
-QueueHandle_t mainTaskQueue;
-ShiftRegister74HC595<2> sr(5, 19, 18);
-HardwareSerial myDFPlayerSerial(2);
-DFRobotDFPlayerMini myDFPlayer;
-PCF8574 pcf(0x20);
-volatile unsigned long pressStart[4] = {0, 0, 0, 0};
-volatile bool pressed[4] = {false, false, false, false};
-
+#include <ShiftRegister74HC595.h>
+ShiftRegister74HC595<2> sr(5, 19, 18); // Use your actual pins here
 void setup() {
-  Serial.begin(115200);
-  sr.setAllLow();
+    Serial.begin(115200);
+    delay(1000);
+    Serial.println("Relay test start!");
 
-  gpio_declarations();
+    // Initialize shift register if needed (depends on your codebase)
+    // sr.begin(); // Uncomment if you have an init function
 
-  Wire.begin(21, 22); // or your actual SDA, SCL pins
-  if (!pcf.begin()) {
-    Serial.println("PCF8574 not found!");
-    while (1);
-  } else {
-    Serial.println("PCF8574 online.");
-    // After successful I2C init
-    sr.set(LED_I2C, HIGH);
-  }
+    // Test sequence: turn each relay on for 1s, then off
+    setRedLighting(true);
+    Serial.println("Red lighting ON");
+    delay(1000);
+    setRedLighting(false);
+    Serial.println("Red lighting OFF");
+    delay(500);
 
-  myDFPlayerSerial.begin(9600, SERIAL_8N1, 16, 17);
-  // Serial.println("DFPlayer Mini test");
-  if (!myDFPlayer.begin(myDFPlayerSerial)) {
-      Serial.println("Unable to begin DFPlayer Mini:\n"
-                     "Check SD card.\n"
-                     "check hardware connections.\n");
-  } else {
-      Serial.println("DFPlayer Mini online.");
-      sr.set(LED_DFPLAYER, HIGH);
-  }
+    setGreenLighting(true);
+    Serial.println("Green lighting ON");
+    delay(1000);
+    setGreenLighting(false);
+    Serial.println("Green lighting OFF");
+    delay(500);
 
-  rfEventQueue = xQueueCreate(10, sizeof(RfEvent));
-  mainTaskQueue = xQueueCreate(10, sizeof(MainTaskMsg));
-  xTaskCreatePinnedToCore(rfControllerTask, "RF Controller", 2048, NULL, 2, NULL, 1);
-  xTaskCreatePinnedToCore(mainTask, "Main Task", 2048, NULL, 1, NULL, 1);
+    setLasers(true);
+    Serial.println("Lasers ON");
+    delay(1000);
+    setLasers(false);
+    Serial.println("Lasers OFF");
+    delay(500);
 
-  sr.set(LED_SETUP_OK, HIGH);
-  // sr.setAllHigh(); // Set all outputs high to indicate setup is complete
-  Serial.println("Setup complete, tasks started.");
+    // Blink lasers 3 times
+    Serial.println("Blinking lasers 3 times...");
+    blinkLasers(3, 300);
+
+    Serial.println("Relay test complete!");
 }
 
 void loop() {
-  // Nothing here, everything is handled by tasks
+    // Nothing to do in loop
 }
