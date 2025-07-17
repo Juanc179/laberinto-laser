@@ -1,0 +1,125 @@
+Project Overview: Laser Barrier Game
+This project is an interactive laser maze game using an ESP32, shift registers, relays, a DFPlayer Mini for audio, and a PCF8574 I/O expander. Players must cross a laser maze without breaking the beams. The system manages lighting, lasers, audio feedback, and game logic, and is controlled via RF remote buttons.
+
+Main Files and Their Roles
+1. main.cpp
+Purpose: Entry point for the program. Initializes hardware, peripherals, and starts FreeRTOS tasks.
+Key actions:
+Initializes the shift register (sr), DFPlayer Mini, PCF8574, and serial communication.
+Sets up queues for inter-task communication.
+Starts the main game logic task (mainTask) and the RF controller task (rfControllerTask).
+2. globals.h
+Purpose: Declares global variables, hardware objects, enums, and helper functions used across the project.
+Key contents:
+External declarations for hardware objects (sr, myDFPlayer, pcf, etc.).
+Enum srOutputs for shift register output assignments (e.g., k1, k2, k3 for relays).
+Helper functions for controlling relays: setRedLighting, setGreenLighting, setLasers, and blinkLasers.
+Structs for RF event handling and audio track info.
+3. functions.h / functions.cpp
+Purpose: Implements utility and hardware control functions.
+Key functions:
+playAudioInterrupt(trackIdx): Plays a specific audio track using the DFPlayer Mini.
+setRedLighting, setGreenLighting, setLasers: Control relays via the shift register.
+blinkLasers: Blinks the laser relay a specified number of times.
+4. tasks.cpp
+Purpose: Contains FreeRTOS tasks for the main game logic and RF controller.
+Key tasks:
+mainTask: Handles the entire game flow, including waiting for player input, managing lives, lighting, lasers, and audio feedback.
+rfControllerTask: Handles RF button events and sends them to the main task via a queue.
+5. isr.cpp
+Purpose: Handles interrupts from RF buttons.
+Key function:
+handle_rf_isr(int idx): Detects button presses/releases, determines if the press was short or long, and sends the event to the RF event queue.
+Game Logic Summary (mainTask)
+Startup:
+
+Initializes all hardware.
+Scans lasers to detect any broken beams.
+Waits for a short press on RF1 to turn on both LED strips (red and green).
+Each subsequent short press on RF1 plays the instructions audio.
+A long press on RF1 starts the game for the first player.
+Player Turn:
+
+Before each player: turns off both lights, turns on lasers.
+Waits for a long press on RF1 to start the player's turn.
+During the turn:
+Monitors laser interruptions and RF2 button events.
+If a laser is interrupted or RF2 is short-pressed, the player loses a life, lasers blink 3 times, and the appropriate audio is played.
+If RF2 is long-pressed, the player wins, green lighting is turned on, lasers are turned off, and win audio is played.
+If all lives are lost or time runs out, red lighting is turned on, lasers are turned off, and the corresponding audio is played.
+After Turn:
+
+Waits briefly, then resets lighting and lasers for the next player.
+Key Functions Explained
+setRedLighting(bool on):
+Turns the red LED strip relay on or off using the shift register (k1).
+
+setGreenLighting(bool on):
+Turns the green LED strip relay on or off using the shift register (k2).
+
+setLasers(bool on):
+Turns the laser emitters relay on or off using the shift register (k3).
+
+blinkLasers(int times, int delayMs):
+Blinks the lasers relay off and on for visual feedback when a life is lost.
+
+playAudioInterrupt(uint8_t trackIdx):
+Plays a specific audio track (instructions, life lost, win, etc.) using the DFPlayer Mini.
+
+handle_rf_isr(int idx):
+Detects button press duration and sends either a short or long press event to the RF event queue.
+
+How the Shift Register and Relays Work
+The shift register (sr) is used to expand the number of digital outputs, allowing control of multiple relays and indicators.
+The relays are mapped as follows:
+k1: Red lighting
+k2: Green lighting
+k3: Lasers
+The helper functions abstract the relay control, so you can simply call setRedLighting(true) to turn on the red LED strip, etc.
+How to Use the Project
+Power on the system.
+Wait for the serial monitor to show system status.
+Press RF1 (short press) to turn on both LED strips.
+Press RF1 (short press) again to play instructions (repeatable).
+Press RF1 (long press) to start the first player's game.
+Player must cross the maze without breaking lasers.
+If a laser is interrupted or RF2 is short-pressed, the player loses a life and receives audio/visual feedback.
+If RF2 is long-pressed, the player wins.
+If all lives are lost or time runs out, the player loses.
+After each turn, the system resets for the next player.
+Summary Table of Files
+File	Purpose/Role
+main.cpp	Entry point, hardware setup, starts tasks
+globals.h	Global variables, enums, relay/laser/audio helpers
+functions.h/cpp	Hardware control and utility functions
+tasks.cpp	FreeRTOS tasks for game logic and RF event handling
+isr.cpp	Interrupt handler for RF button presses
+This structure makes the code modular, easy to maintain, and allows for flexible expansion (e.g., adding more lighting effects or audio tracks).
+Your friend can follow the logic in mainTask for the game flow, and use the helper functions for hardware control.
+All hardware-specific details (pins, relays, etc.) are abstracted for clarity and reusability.
+
+
+Encendé el sistema
+
+Conectá la alimentación del equipo. Esperá unos segundos hasta que las luces y el sistema estén listos.
+Prepará el juego
+
+Cuando veas el mensaje en el monitor serie o las luces estén apagadas, presioná el botón RF1 (control remoto, primer botón) con una pulsación corta.
+Se van a encender las dos tiras LED (roja y verde), indicando que el sistema está listo.
+Escuchá las instrucciones
+
+Presioná nuevamente el botón RF1 (pulsación corta) para escuchar las instrucciones del juego por el parlante.
+Si necesitás escuchar las instrucciones otra vez, presioná de nuevo el mismo botón (pulsación corta). Podés repetir esto las veces que quieras.
+Comenzá el turno del jugador
+
+Cuando estén listos, mantené presionado el botón RF1 (pulsación larga) hasta que el sistema indique que el primer jugador puede comenzar.
+Jugá el laberinto
+
+El jugador debe atravesar el laberinto sin interrumpir los haces láser.
+Si se interrumpe un láser o se presiona el botón RF2 (segundo botón, pulsación corta), el jugador pierde una vida y el sistema lo indicará con luces y sonido.
+Si el jugador mantiene presionado el botón RF2 (pulsación larga), se considera que ganó el juego y el sistema lo indicará con luces verdes y sonido de victoria.
+Si el jugador pierde todas las vidas o se termina el tiempo, el sistema lo indicará con luces rojas y sonido de derrota.
+Cambio de jugador
+
+Después de cada turno, el sistema se reinicia automáticamente para el próximo jugador.
+Repetí los pasos desde el punto 4 para cada nuevo jugador.
