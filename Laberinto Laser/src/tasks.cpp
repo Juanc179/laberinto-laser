@@ -93,10 +93,10 @@ void mainTask(void *pvParameters) {
     int playerNumber = 1;
     while (1) { // Infinite player loop
         // Reset lighting and lasers for new player
-        setRedLighting(false);
-        setGreenLighting(false);
+        //setRedLighting(false);
+        //setGreenLighting(false);
         setLasers(true);
-
+        
         // Wait for long press on RF button 1 to start player
         Serial.printf("Waiting for player %d to start (long press RF1)...\n", playerNumber);
         while (1) {
@@ -106,7 +106,8 @@ void mainTask(void *pvParameters) {
                 }
             }
         }
-
+        setRedLighting(false);
+        setGreenLighting(false);
         int lives = LIVES_PER_PLAYER;
         unsigned long startTime = millis();
         bool playerWon = false;
@@ -133,6 +134,7 @@ void mainTask(void *pvParameters) {
                         if (rf2msg.type == SHORT_PRESS) {
                             // Lose a life by RF2 short press
                             rf2Event = true;
+
                             break;
                         } else if (rf2msg.type == LONG_PRESS) {
                             // Win by RF2 long press
@@ -197,6 +199,7 @@ void mainTask(void *pvParameters) {
             // Timeout case, already played timeout audio
             setRedLighting(true);
             setGreenLighting(false);
+            playAudioInterrupt(5); // Game ended by timeout
         }
 
         Serial.printf("Player %d's turn is over.\n", playerNumber);

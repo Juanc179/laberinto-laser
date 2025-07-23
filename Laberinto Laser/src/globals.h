@@ -29,7 +29,7 @@ extern volatile bool pressed[4];
 
 // shift register outputs assignments.
 enum srOutputs {
-  ecm_1 = 0,
+  ecm_1 = 1,
   ecm_2,
   ecm_3,
   ecm_4,
