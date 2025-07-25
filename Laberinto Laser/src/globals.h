@@ -27,6 +27,11 @@ struct MainTaskMsg {
 extern volatile unsigned long pressStart[4];
 extern volatile bool pressed[4];
 
+// Global variables for game state
+extern unsigned long gameTimeLimit;
+extern bool systemReady;
+extern TaskHandle_t mainTaskHandle;
+
 // shift register outputs assignments.
 enum srOutputs {
   ecm_1 = 1,

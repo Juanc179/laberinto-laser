@@ -15,6 +15,11 @@ PCF8574 pcf(0x20);
 volatile unsigned long pressStart[4] = {0, 0, 0, 0};
 volatile bool pressed[4] = {false, false, false, false};
 
+// Global variables for game state
+unsigned long gameTimeLimit = 60000; // Default 1 minute
+bool systemReady = false;
+TaskHandle_t mainTaskHandle = NULL;
+
 void setup() {
   Serial.begin(115200);
   Serial.println("Setup started");
@@ -45,12 +50,13 @@ void setup() {
 
   rfEventQueue = xQueueCreate(10, sizeof(RfEvent));
   mainTaskQueue = xQueueCreate(10, sizeof(MainTaskMsg));
+  
+  // Create RF controller task and main coordinator task
   xTaskCreatePinnedToCore(rfControllerTask, "RF Controller", 2048, NULL, 2, NULL, 1);
-  xTaskCreatePinnedToCore(mainTask, "Main Task", 2048, NULL, 1, NULL, 1);
+  xTaskCreatePinnedToCore(mainTask, "Main Task", 4096, NULL, 1, &mainTaskHandle, 1);
 
   sr.set(LED_SETUP_OK, HIGH);
-  // sr.setAllHigh(); // Set all outputs high to indicate setup is complete
-  Serial.println("Setup complete, tasks started.");
+  Serial.println("Setup complete, main coordinator started.");
 }
 
 void loop() {
