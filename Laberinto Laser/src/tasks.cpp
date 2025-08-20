@@ -14,7 +14,6 @@ enum GameState {
 volatile GameState currentGameState = STATE_IDLE;
 volatile bool taskCompleted = false;
 volatile bool emergencyRestart = false;
-TaskHandle_t mainTaskHandle = NULL;
 TaskHandle_t preparationTaskHandle = NULL;
 TaskHandle_t questTaskHandle = NULL;
 TaskHandle_t consequenceTaskHandle = NULL;
@@ -244,30 +243,30 @@ void preparationTask(void *pvParameters) {
     Serial.println("RF2 (long press) = 1 minute");
     Serial.println("RF3 (long press) = 1.5 minutes");
     
-    unsigned long selectedTimeLimit = 60000; // Default 1 minute
-    int blinkCount = 2; // Default for 1 minute
+    unsigned long selectedTimeLimit = 70000; // Default 70 seconds
+    int blinkCount = 2; // Default for 70 seconds
     bool modeSelected = false;
     
     while (!modeSelected) {
         if (xQueueReceive(mainTaskQueue, &msg, portMAX_DELAY) == pdTRUE) {
             if (msg.type == LONG_PRESS) {
                 switch (msg.channel) {
-                    case 0: // RF1 - 30 seconds
-                        selectedTimeLimit = 30000;
+                    case 0: // RF1 - 40 seconds
+                        selectedTimeLimit = 40000;
                         blinkCount = 1;
-                        Serial.println("Mode selected: 30 seconds");
+                        Serial.println("Mode selected: 40 seconds");
                         modeSelected = true;
                         break;
-                    case 1: // RF2 - 1 minute
-                        selectedTimeLimit = 60000;
+                    case 1: // RF2 - 70 seconds
+                        selectedTimeLimit = 70000;
                         blinkCount = 2;
-                        Serial.println("Mode selected: 1 minute");
+                        Serial.println("Mode selected: 70 seconds");
                         modeSelected = true;
                         break;
-                    case 2: // RF3 - 1.5 minutes
-                        selectedTimeLimit = 90000;
+                    case 2: // RF3 - 100 seconds
+                        selectedTimeLimit = 100000;
                         blinkCount = 3;
-                        Serial.println("Mode selected: 1.5 minutes");
+                        Serial.println("Mode selected: 100 seconds");
                         modeSelected = true;
                         break;
                     // RF4 is reserved for emergency restart, ignore other channels
@@ -340,6 +339,10 @@ void questTask(void *pvParameters) {
     
     // --- Game Phase starts here ---
     
+    // Turn on lasers for the first game setup
+    setLasers(true);
+    Serial.println("Lasers turned ON - Game ready to start");
+    
     // Perform laser check after preparation is complete
     bool laserWorking[NUM_LASERS];
     uint8_t pcfState = pcf.read8();
@@ -362,14 +365,25 @@ void questTask(void *pvParameters) {
         // Reset lighting and lasers for new player
         setLasers(true);
         
-        // Wait for long press on RF button 1 to start player
-        Serial.printf("Waiting for player %d to start (long press RF1)...\n", playerNumber);
-        while (1) {
-            if (xQueueReceive(mainTaskQueue, &msg, portMAX_DELAY) == pdTRUE) {
-                if (msg.channel == 0 && msg.type == LONG_PRESS) {
-                    break;
+        // For first player, wait for RF1 to start. For subsequent players, start automatically
+        if (playerNumber == 1) {
+            Serial.printf("Waiting for player %d to start (short press RF1)...\n", playerNumber);
+            while (1) {
+                if (xQueueReceive(mainTaskQueue, &msg, portMAX_DELAY) == pdTRUE) {
+                    if (msg.channel == 0 && msg.type == SHORT_PRESS) {
+                        break;
+                    } else if (msg.channel == 2 && msg.type == LONG_PRESS) {
+                        // RF3 can end game even while waiting for player to start
+                        Serial.println("RF3 long press detected - Ending game!");
+                        currentGameState = STATE_CONSEQUENCE;
+                        vTaskDelete(NULL); // Exit quest task
+                        return;
+                    }
                 }
             }
+        } else {
+            // For subsequent players, they start automatically after decision
+            Serial.printf("Player %d starting automatically...\n", playerNumber);
         }
         
         setRedLighting(false);
@@ -379,9 +393,9 @@ void questTask(void *pvParameters) {
         bool playerWon = false;
         bool gameEnded = false; // Track if game was ended early with RF3
 
-        // Play countdown audio for player start (audio 6: "el laberinto esta listo...")
+        // Play countdown audio for player start (audio 7: start turn)
         Serial.printf("Player %d get ready! Playing countdown...\n", playerNumber);
-        playAudioInterrupt(6); // Audio 7 - 1 = 6
+        playAudioInterrupt(7); // Audio 07 - start turn
         
         // Wait 8 seconds for the countdown audio to complete
         vTaskDelay(8000 / portTICK_PERIOD_MS);
@@ -414,7 +428,7 @@ void questTask(void *pvParameters) {
                             // Win by RF2 long press
                             playerWon = true;
                             Serial.printf("Player %d wins!\n", playerNumber);
-                            playAudioInterrupt(6); // Game ended, player won
+                            playAudioInterrupt(5); // Audio 05 - won
                             break;
                         }
                     } else if (rfMsg.channel == 2) { // RF3 - End game
@@ -458,7 +472,7 @@ void questTask(void *pvParameters) {
             // Time check
             if ((millis() - startTime) >= PLAYER_TIME_LIMIT) {
                 Serial.printf("Player %d ran out of time!\n", playerNumber);
-                playAudioInterrupt(8); // Audio 9 - 1 = 8 ("se acabo el tiempo...")
+                // Don't play timeout audio here - handle it in results section
                 break;
             }
 
@@ -468,43 +482,91 @@ void questTask(void *pvParameters) {
         // After game ends, turn off lasers
         setLasers(false);
 
-        // Store game result for consequence task
+        // Store game result and handle audio/lighting
         if (gameEnded) {
-            // Game ended by RF3 - neutral state
+            // Game ended by RF3 - go directly to consequence phase
             Serial.printf("Player %d ended the game early with RF3.\n", playerNumber);
             setRedLighting(false);
             setGreenLighting(false);
+            
+            // Move directly to consequence phase (no audio here)
+            Serial.println("Moving to consequence phase...");
+            currentGameState = STATE_CONSEQUENCE;
+            vTaskDelete(NULL); // Exit quest task
+            return;
+            
         } else if (playerWon) {
             setGreenLighting(true);
             setRedLighting(false);
+            
+            // Wait for win audio to complete (audio 5 = 12 seconds) plus buffer
+            vTaskDelay(13000 / portTICK_PERIOD_MS); // Wait 13 seconds for audio to complete
+            Serial.println("Playing next player preparation audio...");
+            playAudioInterrupt(8); // Audio 08 - after turn
+            
         } else if (lives == 0) {
             // Player lost all lives - red lighting already set during life loss
             setRedLighting(true);
             setGreenLighting(false);
             
-            // Play next player audio after life loss (audio 7: "el laberinto se reiniciara...")
-            vTaskDelay(2000 / portTICK_PERIOD_MS); // Give time for lighting effects
+            // Wait for life loss audio to complete (audio 4 = 9 seconds) plus buffer
+            vTaskDelay(10000 / portTICK_PERIOD_MS); // Wait 10 seconds for audio to complete
             Serial.println("Playing next player preparation audio...");
-            playAudioInterrupt(7); // Audio 8 - 1 = 7
+            playAudioInterrupt(8); // Audio 08 - after turn
             
-        } else {
-            // Timeout case - red lighting
+        } else if ((millis() - startTime) >= PLAYER_TIME_LIMIT) {
+            // Timeout case - red lighting and timeout audio
             setRedLighting(true);
             setGreenLighting(false);
             
-            // Play next player audio after timeout (audio 7: "el laberinto se reiniciara...")
-            vTaskDelay(2000 / portTICK_PERIOD_MS); // Give time for lighting effects  
+            Serial.println("Playing timeout audio...");
+            playAudioInterrupt(6); // Audio 06 - timeout
+            
+            // Wait for timeout audio to complete (audio 6 = 11 seconds) plus buffer
+            vTaskDelay(12000 / portTICK_PERIOD_MS); // Wait 12 seconds for audio to complete
             Serial.println("Playing next player preparation audio...");
-            playAudioInterrupt(7); // Audio 8 - 1 = 7
+            playAudioInterrupt(8); // Audio 08 - after turn
         }
 
-        Serial.printf("Player %d's turn is over. Moving to consequence phase.\n", playerNumber);
+        Serial.printf("Player %d's turn is over.\n", playerNumber);
         
-        // Move to consequence phase
-        currentGameState = STATE_CONSEQUENCE;
+        // Wait for after-turn audio to complete (audio 8 = 12 seconds) plus buffer
+        vTaskDelay(13000 / portTICK_PERIOD_MS);
         
-        // Task completes here - quest is done
-        vTaskDelete(NULL);
+        // Automatic labyrinth restart - turn off all lights after restart audio
+        setRedLighting(false);
+        setGreenLighting(false);
+        Serial.println("Labyrinth restarted automatically - Lights turned OFF");
+        
+        // Turn on lasers for next player
+        setLasers(true);
+        Serial.println("Lasers turned ON - Ready for next player");
+        
+        // Check if user wants to end the game or continue with next player
+        Serial.println("Options:");
+        Serial.println("RF1 (short press) - Next player");
+        Serial.println("RF3 (long press) - End game and go to consequence phase");
+        
+        bool nextPlayerDecided = false;
+        while (!nextPlayerDecided) {
+            if (xQueueReceive(mainTaskQueue, &msg, portMAX_DELAY) == pdTRUE) {
+                if (msg.channel == 0 && msg.type == SHORT_PRESS) {
+                    // Continue with next player - automatically start their turn
+                    playerNumber++;
+                    Serial.printf("Starting player %d automatically...\n", playerNumber);
+                    nextPlayerDecided = true;
+                    // No need to wait for another RF1 press - go directly to game sequence
+                } else if (msg.channel == 2 && msg.type == LONG_PRESS) {
+                    // End game and go to consequence
+                    Serial.println("Ending game session - Moving to consequence phase...");
+                    currentGameState = STATE_CONSEQUENCE;
+                    vTaskDelete(NULL); // Exit quest task
+                    return;
+                }
+            }
+        }
+        
+        // Continue the loop for next player (don't move to consequence yet)
     }
 }
 
@@ -515,17 +577,15 @@ void consequenceTask(void *pvParameters) {
     setLasers(false);
     Serial.println("Lasers turned OFF");
     
-    // Turn on both lights
+    // Turn on both lights (red and green)
     setRedLighting(true);
     setGreenLighting(true);
     Serial.println("Both red and green lights turned ON");
     
-    // Display results for a while
-    vTaskDelay(3000 / portTICK_PERIOD_MS);
-    
-    // Play ending audio (audio 9)
-    Serial.println("Playing ending audio (track 9)...");
-    playAudioInterrupt(9); // Audio 10 - 1 = 9 ("el juego ha terminado...")
+    // Force stop any ongoing audio by playing a working track first, then play goodbye
+    Serial.println("Ensuring audio is ready...");
+    playAudioInterrupt(0); // Track 0 - goodbye audio (confirmed working)
+    Serial.println("Playing goodbye audio (track 0)...");
     
     unsigned long lastAudioTime = millis();
     const unsigned long AUDIO_REPEAT_INTERVAL = 20000; // 20 seconds
@@ -546,8 +606,8 @@ void consequenceTask(void *pvParameters) {
         
         // Check if 20 seconds have passed since last audio play
         if ((millis() - lastAudioTime) >= AUDIO_REPEAT_INTERVAL) {
-            Serial.println("Replaying ending audio (track 9)...");
-            playAudioInterrupt(9); // Audio 10 - 1 = 9 ("el juego ha terminado...")
+            Serial.println("Replaying ending audio (track 0)...");
+            playAudioInterrupt(0); // Audio 00 - goodbye (confirmed working)
             lastAudioTime = millis();
         }
         
