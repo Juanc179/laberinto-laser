@@ -6,3 +6,4 @@ void setRedLighting(bool on);
 void setGreenLighting(bool on);
 void setLasers(bool on);
 void blinkLasers(int times, int delayMs = 200);
+void flushMainTaskQueue();

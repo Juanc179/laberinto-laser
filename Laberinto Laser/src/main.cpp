@@ -48,8 +48,8 @@ void setup() {
       sr.set(LED_DFPLAYER, HIGH);
   }
 
-  rfEventQueue = xQueueCreate(10, sizeof(RfEvent));
-  mainTaskQueue = xQueueCreate(10, sizeof(MainTaskMsg));
+  rfEventQueue = xQueueCreate(1, sizeof(RfEvent));
+  mainTaskQueue = xQueueCreate(1, sizeof(MainTaskMsg));
   
   // Create RF controller task and main coordinator task
   xTaskCreatePinnedToCore(rfControllerTask, "RF Controller", 2048, NULL, 2, NULL, 1);

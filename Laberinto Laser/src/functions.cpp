@@ -31,3 +31,17 @@ void blinkLasers(int times, int delayMs) {
         vTaskDelay(delayMs / portTICK_PERIOD_MS);
     }
 }
+/*
+void clearMainTaskQueue() {
+    MainTaskMsg dummyMsg;
+    while (uxQueueMessagesWaiting(mainTaskQueue) > 0) {
+        xQueueReceive(mainTaskQueue, &dummyMsg, 0);
+    }
+} */
+
+void flushMainTaskQueue() {
+    MainTaskMsg dummyMsg;
+    while (uxQueueMessagesWaiting(mainTaskQueue) > 0) {
+        xQueueReceive(mainTaskQueue, &dummyMsg, 0);
+    }
+}
