@@ -103,12 +103,8 @@ void rfControllerTask(void *pvParameters) {
             msg.channel = event.channel;
             msg.type = event.type;
             
-            // Check for and remove any old message in the queue
-            if (uxQueueMessagesWaiting(mainTaskQueue) > 0) {
-                MainTaskMsg dummyMsg;
-                xQueueReceive(mainTaskQueue, &dummyMsg, 0); // Remove old message
-            }
-            xQueueSend(mainTaskQueue, &msg, 0); // Send new message
+            // Send message to main task queue (let queue handle overflow)
+            xQueueSend(mainTaskQueue, &msg, 0);
         }
     }
 }
@@ -153,12 +149,10 @@ void mainTask(void *pvParameters) {
                         }
                     }
                 }
-                flushMainTaskQueue();
                 break;
                 
             case STATE_PREPARATION:
-                flushMainTaskQueue();
-            // Create preparation task
+                // Create preparation task
                 xTaskCreatePinnedToCore(
                     preparationTask,
                     "PreparationTask",
@@ -174,13 +168,11 @@ void mainTask(void *pvParameters) {
                     vTaskDelay(100 / portTICK_PERIOD_MS);
                 }
                 Serial.println("Preparation phase completed");
-                flushMainTaskQueue();
                 break;
                 
             case STATE_QUEST:
                 Serial.println("Starting quest phase...");
                 // Create quest task
-                flushMainTaskQueue();
                 xTaskCreatePinnedToCore(
                     questTask,
                     "QuestTask",
@@ -196,13 +188,11 @@ void mainTask(void *pvParameters) {
                     vTaskDelay(100 / portTICK_PERIOD_MS);
                 }
                 Serial.println("Quest phase completed");
-                flushMainTaskQueue();
                 break;
                 
             case STATE_CONSEQUENCE:
                 Serial.println("Starting consequence phase...");
                 // Create consequence task
-                flushMainTaskQueue();
                 xTaskCreatePinnedToCore(
                     consequenceTask,
                     "ConsequenceTask",
@@ -313,7 +303,7 @@ void preparationTask(void *pvParameters) {
             }
         }
     }
-    flushMainTaskQueue();
+    
     // Task completes here - preparation is done
     vTaskDelete(NULL);
 }
@@ -421,36 +411,34 @@ void questTask(void *pvParameters) {
 
             // Check for RF2 events (lose life or win) and RF3 events (end game)
             bool rf2Event = false;
-            bool gameEnded = false;
-            anyInterrupted = false;
+            // Note: gameEnded is already declared in outer scope - don't redeclare it
+            // Note: Don't override anyInterrupted here - it was calculated above
             MainTaskMsg rfMsg;
-            //flushMainTaskQueue();
-            while (uxQueueMessagesWaiting(mainTaskQueue) > 0) {
+            // Process RF button events one at a time to avoid accumulation
+            if (uxQueueMessagesWaiting(mainTaskQueue) > 0) {
                 if (xQueueReceive(mainTaskQueue, &rfMsg, 0) == pdTRUE) {
                     if (rfMsg.channel == 1) { // RF2
                         if (rfMsg.type == SHORT_PRESS) {
                             // Lose a life by RF2 short press
                             rf2Event = true;
-                            break;
                         } else if (rfMsg.type == LONG_PRESS) {
                             // Win by RF2 long press
                             playerWon = true;
                             Serial.printf("Player %d wins!\n", playerNumber);
                             playAudioInterrupt(5); // Audio 05 - won
-                            break;
                         }
                     } else if (rfMsg.channel == 2) { // RF3 - End game
                         if (rfMsg.type == LONG_PRESS) {
                             Serial.println("RF3 long press detected - Ending game!");
                             gameEnded = true;
-                            break;
                         }
                     }
+                    // Note: Process only one event per game loop iteration to prevent accumulation
                 }
             }
             if (playerWon) break;
             if (gameEnded) break; // Exit if RF3 end game was pressed
-            flushMainTaskQueue();
+
             // Lose a life by laser interruption or RF2 short press
             if (anyInterrupted || rf2Event) {
                 lives--;
@@ -491,7 +479,7 @@ void questTask(void *pvParameters) {
                 // Don't play timeout audio here - handle it in results section
                 break;
             }
-            flushMainTaskQueue();
+
             vTaskDelay(50 / portTICK_PERIOD_MS);
         }
 
