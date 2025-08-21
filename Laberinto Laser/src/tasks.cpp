@@ -392,12 +392,11 @@ void questTask(void *pvParameters) {
         // Play countdown audio for player start (audio 7: start turn)
         Serial.printf("Player %d get ready! Playing countdown...\n", playerNumber);
         playAudioInterrupt(7); // Audio 07 - start turn
-        flushMainTaskQueue();
+        
         // Wait 6 seconds for the countdown audio to complete
         vTaskDelay(6000 / portTICK_PERIOD_MS);
         playAudioInterrupt(13); // Audio 13 - all for now
         Serial.printf("Player %d started!\n", playerNumber);
-        flushMainTaskQueue();
         while (lives > 0 && (millis() - startTime) < PLAYER_TIME_LIMIT && !playerWon && !gameEnded) {
             // Check for laser interruption
             pcfState = pcf.read8();
@@ -485,7 +484,7 @@ void questTask(void *pvParameters) {
 
         // After game ends, turn off lasers
         setLasers(false);
-        flushMainTaskQueue();
+        
         // Store game result and handle audio/lighting
         if (gameEnded) {
             // Game ended by RF3 - go directly to consequence phase
@@ -552,7 +551,7 @@ void questTask(void *pvParameters) {
         Serial.println("RF3 (long press) - End game and go to consequence phase");
         myDFPlayer.play(12);
         bool nextPlayerDecided = false;
-        flushMainTaskQueue();
+        
         while (!nextPlayerDecided) {
             if (xQueueReceive(mainTaskQueue, &msg, portMAX_DELAY) == pdTRUE) {
                 if (msg.channel == 0 && msg.type == SHORT_PRESS) {
@@ -570,13 +569,12 @@ void questTask(void *pvParameters) {
                 }
             }
         }
-        flushMainTaskQueue();
+        
         // Continue the loop for next player (don't move to consequence yet)
     }
 }
 
 void consequenceTask(void *pvParameters) {
-    flushMainTaskQueue();
     Serial.println("Consequence task started - Game ending phase");
     
     // Turn off lasers immediately
